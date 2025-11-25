@@ -81,7 +81,7 @@ public partial class Home
 
         if (raceSession != null)
         {
-            Navigation.NavigateTo($"/race/{raceSession.SessionKey}");
+            Navigation.NavigateTo($"race/{raceSession.SessionKey}");
         }
         else
         {
