@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class Driver
+internal class Driver
 {
     public int DriverNumber { get; set; }
     public string BroadcastName { get; set; } = string.Empty;

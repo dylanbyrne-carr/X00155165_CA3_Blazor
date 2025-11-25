@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class Stint
+internal class Stint
 {
     public int DriverNumber { get; set; }
     public int StintNumber { get; set; }

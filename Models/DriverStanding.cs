@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class DriverStanding
+internal class DriverStanding
 {
     public int Position { get; set; }
     public int StartPosition { get; set; }

@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class Session
+internal class Session
 {
     public int SessionKey { get; set; }
     public string SessionName { get; set; } = string.Empty;

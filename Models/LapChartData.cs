@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class LapChartData
+internal class LapChartData
 {
     public string DriverName { get; set; } = string.Empty;
     public double LapTime { get; set; }

@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class PositionChartData
+internal class PositionChartData
 {
     public int DriverNumber { get; set; }
     public string DriverAcronym { get; set; } = string.Empty;

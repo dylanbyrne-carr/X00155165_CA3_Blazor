@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class PitStop
+internal class PitStop
 {
     public int DriverNumber { get; set; }
     public int LapNumber { get; set; }

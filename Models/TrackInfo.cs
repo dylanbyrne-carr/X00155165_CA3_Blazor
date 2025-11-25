@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-public class TrackInfo
+internal class TrackInfo
 {
     public int MeetingKey { get; set; }
     public string MeetingOfficialName { get; set; } = string.Empty;

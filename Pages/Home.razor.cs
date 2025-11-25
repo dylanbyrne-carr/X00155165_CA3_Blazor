@@ -15,7 +15,7 @@ public partial class Home
     private Dictionary<int, List<TrackInfo>> tracksByYear = new();
     private HashSet<int> expandedYears = new() { 2025 };
     private bool isLoading = true;
-    private string? errorMessage = null;
+    private string? errorMessage;
     private List<Session> allSessions = new();
 
     protected override async Task OnInitializedAsync()
@@ -57,7 +57,7 @@ public partial class Home
                     }).ToList()
                 );
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
             errorMessage = $"Error loading data: {ex.Message}";
         }
@@ -69,14 +69,8 @@ public partial class Home
 
     private void ToggleYear(int year)
     {
-        if (expandedYears.Contains(year))
-        {
-            expandedYears.Remove(year);
-        }
-        else
-        {
-            expandedYears.Add(year);
-        }
+        if(!expandedYears.Remove(year))
+            expandedYears.Add(year);;
     }
 
     private void ViewRaceResults(TrackInfo track)
@@ -95,7 +89,7 @@ public partial class Home
         }
     }
 
-    private string GetTrackImageUrl(string circuitShortName)
+    private static string GetTrackImageUrl(string circuitShortName)
     {
         var trackMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
