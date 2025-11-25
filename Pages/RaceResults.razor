@@ -111,7 +111,7 @@
                         <div class="flex items-center gap-1 flex-shrink-0" title="Tire Strategy">
                             @if (driverStints.ContainsKey(result.Driver.DriverNumber))
                             {
-                                @foreach (var stint in driverStints[result.Driver.DriverNumber])
+                                @foreach (var stint in driverStints[result.Driver.DriverNumber].Where(s => s.LapStart.HasValue))
                                 {
                                     <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold cursor-help @GetTyreClass(stint.Compound)" title="@stint.Compound: Laps @stint.LapStart-@stint.LapEnd">
                                         @GetTyreLetter(stint.Compound)
@@ -165,33 +165,36 @@
             }
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="bg-f1-gray rounded-lg p-6">
-                <h3 class="text-xl font-bold mb-4">Fastest Pit Stops</h3>
-                @if (pitStopData.Any())
+        <div class="bg-f1-gray rounded-lg p-6 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-bold">Fastest Lap Comparison</h3>
+                @if (!string.IsNullOrEmpty(fastestLapTime))
                 {
-                    <div class="space-y-2">
-                        @foreach (var pit in pitStopData.Where(p => p.TotalTime > 0).OrderBy(p => p.TotalTime).Take(10))
-                        {
-                            var driver = raceResults.FirstOrDefault(r => r.Driver.DriverNumber == pit.DriverNumber)?.Driver;
-                            @if (driver != null)
-                            {
-                                <div class="flex items-center gap-3 p-2 bg-f1-dark rounded">
-                                    <div class="w-1 h-6 rounded" style="background-color: #@driver.TeamColour;"></div>
-                                    <span class="font-bold w-12">@driver.NameAcronym</span>
-                                    <span class="text-gray-400 text-sm">Lap @pit.LapNumber</span>
-                                    <span class="ml-auto font-mono">@pit.TotalTime.ToString("F3")s</span>
-                                </div>
-                            }
-                        }
-                    </div>
-                }
-                else
-                {
-                    <p class="text-gray-400">No pit stop data available</p>
+                    <span class="text-purple-400 font-mono">Best: @fastestLapTime</span>
                 }
             </div>
+            @if (lapChartData.Any())
+            {
+                <ApexChart TItem="LapChartData"
+                           Title=""
+                           Options="lapChartOptions"
+                           Height="450">
+                    <ApexPointSeries TItem="LapChartData"
+                                     Items="lapChartData"
+                                     Name="Lap Time"
+                                     SeriesType="SeriesType.Bar"
+                                     XValue="@(e => e.DriverName)"
+                                     YValue="@(e => (decimal)e.GapToFastest)"
+                                     PointColor="@(e => e.TeamColour)" />
+                </ApexChart>
+            }
+            else
+            {
+                <p class="text-gray-400">No lap time data available</p>
+            }
+        </div>
 
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="bg-f1-gray rounded-lg p-6">
                 <h3 class="text-xl font-bold mb-4">Fastest Laps</h3>
                 @if (fastestLaps.Any())
@@ -218,6 +221,52 @@
                     <p class="text-gray-400">No lap time data available</p>
                 }
             </div>
+
+            <div class="bg-f1-gray rounded-lg p-6">
+                <h3 class="text-xl font-bold mb-4">Race Statistics</h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
+                        <span class="text-gray-400">Total Drivers</span>
+                        <span class="font-bold">@raceResults.Count</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
+                        <span class="text-gray-400">Finishers</span>
+                        <span class="font-bold">@raceResults.Count(r => !r.Dnf && !r.Dns && !r.Dsq)</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
+                        <span class="text-gray-400">Retirements</span>
+                        <span class="font-bold">@raceResults.Count(r => r.Dnf)</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
+                        <span class="text-gray-400">Most Positions Gained</span>
+                        @{
+                            var bestGainer = raceResults.Where(r => !r.Dnf && !r.Dns && !r.Dsq).OrderByDescending(r => r.PositionDelta).FirstOrDefault();
+                        }
+                        @if (bestGainer != null && bestGainer.PositionDelta > 0)
+                        {
+                            <span class="font-bold text-green-500">@bestGainer.Driver.NameAcronym (+@bestGainer.PositionDelta)</span>
+                        }
+                        else
+                        {
+                            <span class="font-bold">-</span>
+                        }
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
+                        <span class="text-gray-400">Most Positions Lost</span>
+                        @{
+                            var worstLoser = raceResults.Where(r => !r.Dnf && !r.Dns && !r.Dsq).OrderBy(r => r.PositionDelta).FirstOrDefault();
+                        }
+                        @if (worstLoser != null && worstLoser.PositionDelta < 0)
+                        {
+                            <span class="font-bold text-red-500">@worstLoser.Driver.NameAcronym (@worstLoser.PositionDelta)</span>
+                        }
+                        else
+                        {
+                            <span class="font-bold">-</span>
+                        }
+                    </div>
+                </div>
+            </div>
         </div>
     }
 </div>
@@ -229,8 +278,8 @@
     private Session? session;
     private List<DriverStanding> raceResults = new();
     private Dictionary<int, List<Stint>> driverStints = new();
-    private List<PitStop> pitStopData = new();
     private List<Lap> fastestLaps = new();
+    private List<LapChartData> lapChartData = new();
     private int fastestLapDriverNumber;
     private string fastestLapTime = "";
     private bool isLoading = true;
@@ -238,6 +287,56 @@
     private bool showAllResults = false;
 
     private readonly int[] pointsSystem = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 };
+
+    private ApexChartOptions<LapChartData> lapChartOptions = new()
+    {
+        Chart = new Chart
+        {
+            Background = "transparent",
+            Toolbar = new Toolbar { Show = false }
+        },
+        Theme = new Theme { Mode = Mode.Dark },
+        PlotOptions = new PlotOptions
+        {
+            Bar = new PlotOptionsBar
+            {
+                Horizontal = true,
+                BorderRadius = 4
+            }
+        },
+        Xaxis = new XAxis
+        {
+            Title = new AxisTitle { Text = "Gap to Fastest (seconds)" },
+            Labels = new XAxisLabels
+            {
+                Formatter = "function(val) { return '+' + val.toFixed(2) + 's'; }"
+            }
+        },
+        Yaxis = new List<YAxis>
+        {
+            new YAxis
+            {
+                Labels = new YAxisLabels
+                {
+                    Style = new AxisLabelStyle { FontSize = "12px" }
+                }
+            }
+        },
+        Grid = new Grid { BorderColor = "#38383f" },
+        Tooltip = new Tooltip
+        {
+            Y = new TooltipY
+            {
+                Formatter = "function(val) { return '+' + val.toFixed(3) + 's'; }"
+            }
+        },
+        DataLabels = new DataLabels
+        {
+            Enabled = true,
+            Formatter = "function(val) { return '+' + val.toFixed(2) + 's'; }",
+            Style = new DataLabelsStyle { FontSize = "11px" }
+        }
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -262,7 +361,6 @@
             var sessionResults = await OpenF1Service.GetSessionResultsAsync(SessionKey);
             var laps = await OpenF1Service.GetLapsAsync(SessionKey);
             var stints = await OpenF1Service.GetStintsAsync(SessionKey);
-            pitStopData = await OpenF1Service.GetPitStopsAsync(SessionKey);
 
             var driverDict = drivers
                 .GroupBy(d => d.DriverNumber)
@@ -281,12 +379,31 @@
                 .ToList();
 
             var validLaps = laps.Where(l => l.LapDuration.HasValue && l.LapDuration > 0).ToList();
+            double fastestLapDuration = 0;
             if (validLaps.Any())
             {
                 var fastest = validLaps.OrderBy(l => l.LapDuration).First();
                 fastestLapDriverNumber = fastest.DriverNumber;
+                fastestLapDuration = fastest.LapDuration!.Value;
                 fastestLapTime = FormatLapTime(fastest.LapDuration);
             }
+
+            // Build lap chart data
+            lapChartData = fastestLaps
+                .Where(l => driverDict.ContainsKey(l.DriverNumber))
+                .Take(15)
+                .Select(l =>
+                {
+                    var driver = driverDict[l.DriverNumber];
+                    return new LapChartData
+                    {
+                        DriverName = driver.NameAcronym,
+                        LapTime = l.LapDuration!.Value,
+                        GapToFastest = l.LapDuration!.Value - fastestLapDuration,
+                        TeamColour = $"#{driver.TeamColour}"
+                    };
+                })
+                .ToList();
 
             var startingPositions = positions
                 .GroupBy(p => p.DriverNumber)
@@ -340,7 +457,6 @@
             else
             {
                 // Fallback: build results from position data
-                // Detect DNFs by comparing lap count to leader
                 var maxLapByDriver = laps
                     .GroupBy(l => l.DriverNumber)
                     .ToDictionary(g => g.Key, g => g.Max(l => l.LapNumber));
