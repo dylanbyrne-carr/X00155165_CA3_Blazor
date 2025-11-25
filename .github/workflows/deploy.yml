@@ -30,12 +30,34 @@ jobs:
     - name: Publish
       run: dotnet publish -c Release -o publish
     
-    - name: Change base tag
+    - name: Change base tag in index.html
       run: |
-        sed -i 's/<base href="\/" \/>/<base href="\/X001555165_CA3_Blazor\/" \/>/g' publish/wwwroot/index.html
+        sed -i 's|<base href="/" />|<base href="/X001555165_CA3_Blazor/" />|g' publish/wwwroot/index.html
     
     - name: Add .nojekyll
       run: touch publish/wwwroot/.nojekyll
+    
+    - name: Copy 404.html
+      run: |
+        if [ -f publish/wwwroot/404.html ]; then
+          echo "404.html already exists"
+        else
+          echo "Creating 404.html"
+          cat > publish/wwwroot/404.html <<'EOF'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <script>
+                sessionStorage.redirect = location.href;
+            </script>
+            <meta http-equiv="refresh" content="0;URL='/X001555165_CA3_Blazor/'">
+        </head>
+        <body>
+        </body>
+        </html>
+        EOF
+        fi
     
     - name: Deploy to GitHub Pages
       uses: JamesIves/github-pages-deploy-action@v4
