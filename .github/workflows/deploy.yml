@@ -2,65 +2,84 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  build-and-deploy:
+  build-test-deploy:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '9.0.x'
-    
-    - name: Restore dependencies
-      run: dotnet restore
-    
-    - name: Build
-      run: dotnet build --no-restore -c Release
-    
-    - name: Publish
-      run: dotnet publish -c Release -o publish
-    
-    - name: Change base tag in index.html
-      run: |
-        sed -i 's|<base href="/" />|<base href="/X001555165_CA3_Blazor/" />|g' publish/wwwroot/index.html
-    
-    - name: Add .nojekyll
-      run: touch publish/wwwroot/.nojekyll
-    
-    - name: Copy 404.html
-      run: |
-        if [ -f publish/wwwroot/404.html ]; then
-          echo "404.html already exists"
-        else
-          echo "Creating 404.html"
-          cat > publish/wwwroot/404.html <<'EOF'
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <script>
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Run Static Code Analysis
+        run: |
+          echo "Running .NET Code Analyzers..."
+          dotnet build --no-restore -c Release /p:TreatWarningsAsErrors=false /warnaserror:CA1805,CA1868,CA1822,CA1515,CA1031
+          echo "Code analysis complete!"
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Install Playwright
+        run: |
+          pwsh Tests/bin/Release/net9.0/playwright.ps1 install --with-deps chromium
+
+      - name: Run Application for E2E Tests
+        run: |
+          dotnet run --no-build -c Release --urls=http://localhost:5171 &
+          echo $! > app.pid
+          sleep 15
+
+      - name: Run E2E Tests
+        run: dotnet test --no-build -c Release --filter "FullyQualifiedName~PlaywrightTests" --logger "console;verbosity=detailed"
+
+      - name: Stop Application
+        run: |
+          kill $(cat app.pid) || true
+          rm app.pid
+
+      - name: Publish
+        run: dotnet publish F1RaceAnalytics.csproj -c Release -o release/publish
+
+      - name: Change base-tag in index.html
+        run: sed -i 's|<base href="/" />|<base href="/X00155165_CA3_Blazor/" />|g' release/publish/wwwroot/index.html
+
+      - name: Create 404.html for SPA routing
+        run: |
+          cat > release/publish/wwwroot/404.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <title>F1 Race Analytics</title>
+              <script>
                 sessionStorage.redirect = location.href;
-            </script>
-            <meta http-equiv="refresh" content="0;URL='/X001555165_CA3_Blazor/'">
-        </head>
-        <body>
-        </body>
-        </html>
-        EOF
-        fi
-    
-    - name: Deploy to GitHub Pages
-      uses: JamesIves/github-pages-deploy-action@v4
-      with:
-        folder: publish/wwwroot
-        branch: gh-pages
+              </script>
+              <meta http-equiv="refresh" content="0;URL='/X00155165_CA3_Blazor/'">
+            </head>
+            <body>
+            </body>
+          </html>
+          EOF
+
+      - name: Create .nojekyll file
+        run: touch release/publish/wwwroot/.nojekyll
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: release/publish/wwwroot
+          branch: gh-pages
