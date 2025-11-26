@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>F1 Race Analytics</title>
-    <base href="/X001555165_CA3_Blazor/" />
+    <base href="/X00155165_CA3_Blazor/" />
 
     <!-- GitHub Pages SPA routing fix -->
     <script>
@@ -23,9 +23,10 @@
         theme: {
           extend: {
             colors: {
-              "f1-red": "#15151e",
-              "f1-dark": "#E10600",
+              "f1-dark": "#15151e",
+              "f1-red": "#E10600",
               "f1-silver": "#38383f",
+              "f1-gray": "#2b2b35",
             },
           },
         },
@@ -33,7 +34,7 @@
     </script>
   </head>
 
-  <body>
+  <body class="bg-f1-dark text-white">
     <div id="app">
       <svg class="loading-progress">
         <circle r="40%" cx="50%" cy="50%" />
