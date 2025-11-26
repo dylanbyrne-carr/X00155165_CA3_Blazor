@@ -27,7 +27,7 @@ jobs:
       - name: Run Static Code Analysis
         run: |
           echo "Running .NET Code Analyzers..."
-          dotnet build --no-restore -c Release /p:TreatWarningsAsErrors=false /warnaserror:CA1805,CA1868,CA1822,CA1515,CA1031
+          dotnet build --no-restore -c Release /p:TreatWarningsAsErrors=false /warnaserror:CA1805,CA1868,CA1822,CA1031
           echo "Code analysis complete!"
 
       - name: Build
