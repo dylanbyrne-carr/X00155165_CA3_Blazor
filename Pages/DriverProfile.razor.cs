@@ -18,7 +18,7 @@ public partial class DriverProfile : ComponentBase
     private Dictionary<int, List<RaceResult>> seasonRaces = new();
     private HashSet<int> expandedSeasons = new();
     private bool isLoading = true;
-    private bool isLoadingStats = false;
+    private bool isLoadingStats;
     private string? errorMessage;
     private int currentRaceIndex;
     private int totalRaces;
@@ -55,7 +55,11 @@ public partial class DriverProfile : ComponentBase
                         break;
                     }
                 }
-                catch
+                catch (HttpRequestException)
+                {
+                    continue;
+                }
+                catch (TaskCanceledException)
                 {
                     continue;
                 }
@@ -72,7 +76,15 @@ public partial class DriverProfile : ComponentBase
             isLoadingStats = true;
             await LoadDriverStatsAndRaces(raceSessions);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
+        {
+            errorMessage = $"Error loading driver data: {ex.Message}";
+        }
+        catch (TaskCanceledException)
+        {
+            errorMessage = "Request timed out. Please try again.";
+        }
+        catch (InvalidOperationException ex)
         {
             errorMessage = $"Error loading driver data: {ex.Message}";
         }
@@ -158,15 +170,23 @@ public partial class DriverProfile : ComponentBase
                     Points = points
                 });
             }
-            catch
+            catch (HttpRequestException)
             {
-                // Skip races with errors
+                // Skip races with API errors
+            }
+            catch (TaskCanceledException)
+            {
+                // Skip races with timeout
+            }
+            catch (InvalidOperationException)
+            {
+                // Skip races with data errors
             }
 
             StateHasChanged();
         }
 
-
+        // Calculate ACTUAL averages (sum of positions / number of races)
         foreach (var (year, positions) in seasonPositions)
         {
             if (positions.Count > 0)
@@ -179,9 +199,7 @@ public partial class DriverProfile : ComponentBase
 
     private void ToggleSeason(int year)
     {
-        if (expandedSeasons.Contains(year))
-            expandedSeasons.Remove(year);
-        else
+        if (!expandedSeasons.Remove(year))
             expandedSeasons.Add(year);
     }
 
@@ -208,5 +226,3 @@ public partial class DriverProfile : ComponentBase
         return $"https://flagcdn.com/w80/{countryCode.ToLowerInvariant()}.png";
     }
 }
-
-// Helper class for race-by-race results
