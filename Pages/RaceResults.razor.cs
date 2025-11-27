@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Components;
-using Microsoft.JSInterop;
 using F1RaceAnalytics.Models;
 using F1RaceAnalytics.Services;
 using System.Text.Json;
@@ -14,29 +13,16 @@ public partial class RaceResults : ComponentBase
     [Inject]
     private OpenF1Service OpenF1Service { get; set; } = default!;
 
-    [Inject]
-    private IJSRuntime JSRuntime { get; set; } = default!;
-
     private List<DriverStanding> driverStandings = new();
     private string raceTitle = "";
     private string raceDate = "";
     private bool isLoading = true;
     private string? errorMessage;
-    private string? chartDataJson;
-    private string? lapTimesJson;
     private string trackImageUrl = "";
 
     protected override async Task OnInitializedAsync()
     {
         await LoadRaceData();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && !string.IsNullOrEmpty(chartDataJson))
-        {
-            await JSRuntime.InvokeVoidAsync("initializeCharts", chartDataJson, lapTimesJson);
-        }
     }
 
     private async Task LoadRaceData()
@@ -56,7 +42,7 @@ public partial class RaceResults : ComponentBase
             }
 
             raceTitle = $"{currentSession.CountryName} Grand Prix";
-            raceDate = currentSession.DateStart.ToString("MMMM dd, yyyy");
+            raceDate = currentSession.DateStart.ToString("MMMM dd, yyyy", System.Globalization.CultureInfo.InvariantCulture);
             trackImageUrl = GetTrackImageUrl(currentSession.CircuitShortName);
 
             var drivers = await OpenF1Service.GetDriversAsync(SessionKey);
@@ -71,8 +57,7 @@ public partial class RaceResults : ComponentBase
                 {
                     DriverNumber = g.Key,
                     FinalPosition = g.OrderBy(p => p.Date).Last().Position,
-                    StartPosition = g.OrderBy(p => p.Date).First().Position,
-                    Positions = g.OrderBy(p => p.Date).ToList()
+                    StartPosition = g.OrderBy(p => p.Date).First().Position
                 })
                 .OrderBy(d => d.FinalPosition)
                 .ToList();
@@ -119,52 +104,6 @@ public partial class RaceResults : ComponentBase
                     fastestDriver.HasFastestLap = true;
                 }
             }
-
-            var positionChartData = new
-            {
-                drivers = driverGroups.Select(dg =>
-                {
-                    var driver = drivers.FirstOrDefault(d => d.DriverNumber == dg.DriverNumber);
-                    return new
-                    {
-                        driverNumber = dg.DriverNumber,
-                        driverName = driver?.NameAcronym ?? $"DR{dg.DriverNumber}",
-                        teamColor = driver?.TeamColour ?? "FFFFFF",
-                        positions = dg.Positions.Select(p => new
-                        {
-                            lap = 0,
-                            position = p.Position
-                        }).ToList()
-                    };
-                }).ToList()
-            };
-
-            chartDataJson = JsonSerializer.Serialize(positionChartData);
-
-            var lapTimesData = new
-            {
-                drivers = driverGroups.Select(dg =>
-                {
-                    var driver = drivers.FirstOrDefault(d => d.DriverNumber == dg.DriverNumber);
-                    var driverLaps = laps.Where(l => l.DriverNumber == dg.DriverNumber && l.LapDuration.HasValue && l.LapDuration.Value > 0)
-                        .OrderBy(l => l.LapNumber)
-                        .ToList();
-
-                    return new
-                    {
-                        driverNumber = dg.DriverNumber,
-                        driverName = driver?.NameAcronym ?? $"DR{dg.DriverNumber}",
-                        teamColor = driver?.TeamColour ?? "FFFFFF",
-                        lapTimes = driverLaps.Select(l => new
-                        {
-                            lap = l.LapNumber,
-                            time = l.LapDuration!.Value
-                        }).ToList()
-                    };
-                }).ToList()
-            };
-
-            lapTimesJson = JsonSerializer.Serialize(lapTimesData);
         }
         catch (HttpRequestException ex)
         {

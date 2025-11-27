@@ -117,14 +117,18 @@
             <div class="bg-f1-gray rounded-lg p-6">
                 <h2 class="text-2xl font-bold mb-4 text-white">Tire Strategy</h2>
                 <div class="space-y-3">
-                    @foreach (var driver in driverStandings.Take(10))
+                    @foreach (var driver in driverStandings.Take(20))
                     {
                         <div class="bg-f1-dark rounded p-3">
                             <div class="flex items-center gap-2 mb-2">
-                                <span class="font-bold text-white">P@driver.Position</span>
+                                <span class="font-bold text-white">P@(driver.Position)</span>
                                 <span class="text-gray-400">@driver.DriverName</span>
                             </div>
-                            <div class="flex gap-1">
+                            <div class="flex gap-1 flex-wrap">
+                                @if (driver.TireStints.Count == 0)
+                                {
+                                    <span class="text-gray-500 text-sm">No tire data</span>
+                                }
                                 @foreach (var stint in driver.TireStints)
                                 {
                                     var color = stint.Compound switch
@@ -137,10 +141,10 @@
                                         _ => "bg-gray-500"
                                     };
                                     
-                                    <div class="@color h-6 rounded flex items-center justify-center text-xs font-bold text-black"
-                                         style="width: @(stint.Laps * 3)px; min-width: 30px;"
+                                    <div class="@color h-8 rounded flex items-center justify-center text-sm font-bold text-black px-3"
+                                         style="min-width: 50px;"
                                          title="@stint.Compound - @stint.Laps laps">
-                                        @stint.Compound[0]
+                                        @stint.Laps
                                     </div>
                                 }
                             </div>
@@ -152,7 +156,7 @@
             <div class="bg-f1-gray rounded-lg p-6">
                 <h2 class="text-2xl font-bold mb-4 text-white">Fastest Lap Comparison</h2>
                 <div class="space-y-2">
-                    @foreach (var driver in driverStandings.OrderBy(d => d.BestLapTime).Where(d => d.BestLapTime > 0).Take(10))
+                    @foreach (var driver in driverStandings.OrderBy(d => d.BestLapTime).Where(d => d.BestLapTime > 0).Take(20))
                     {
                         var isGlobal = driver.HasFastestLap;
                         var barColor = isGlobal ? "bg-purple-500" : "bg-f1-red";
@@ -161,7 +165,7 @@
                         var barWidth = 100 - (percentage * 10);
 
                         <div class="flex items-center gap-2">
-                            <span class="text-sm text-gray-400 w-8">P@driver.Position</span>
+                            <span class="text-sm text-gray-400 w-8">P@(driver.Position)</span>
                             <span class="text-white font-medium w-32 truncate">@driver.DriverName</span>
                             <div class="flex-1 bg-gray-700 rounded h-6 relative">
                                 <div class="@barColor h-full rounded transition-all" style="width: @(barWidth)%"></div>
@@ -179,17 +183,5 @@
             </div>
         </div>
 
-        @if (!string.IsNullOrEmpty(chartDataJson))
-        {
-            <div class="bg-f1-gray rounded-lg p-6 mb-6">
-                <h2 class="text-2xl font-bold mb-4 text-white">Position Changes</h2>
-                <div id="positionChart" style="min-height: 400px;"></div>
-            </div>
-
-            <div class="bg-f1-gray rounded-lg p-6">
-                <h2 class="text-2xl font-bold mb-4 text-white">Lap Times</h2>
-                <div id="lapTimesChart" style="min-height: 400px;"></div>
-            </div>
-        }
     }
 </div>

@@ -4,7 +4,7 @@ using F1RaceAnalytics.Services;
 
 namespace F1RaceAnalytics.Pages;
 
-public partial class DriverProfile
+public partial class DriverProfile : ComponentBase
 {
     [Parameter]
     public int DriverNumber { get; set; }
@@ -12,16 +12,14 @@ public partial class DriverProfile
     [Inject]
     private OpenF1Service OpenF1Service { get; set; } = default!;
 
-    [Inject]
-    private NavigationManager Navigation { get; set; } = default!;
-
     private Driver? driver;
     private DriverStats allStats = new();
     private Dictionary<int, DriverStats> seasonStats = new();
+    private Dictionary<int, List<RaceResult>> seasonRaces = new();
+    private HashSet<int> expandedSeasons = new();
     private bool isLoading = true;
-    private bool isLoadingStats;
+    private bool isLoadingStats = false;
     private string? errorMessage;
-    
     private int currentRaceIndex;
     private int totalRaces;
     private string currentRaceName = "";
@@ -38,136 +36,43 @@ public partial class DriverProfile
 
         try
         {
-            var allSessions = new List<Session>();
+            var sessions = await OpenF1Service.GetSessionsAsync(2023, 2025);
+            var raceSessions = sessions.Where(s => s.SessionName == "Race").OrderByDescending(s => s.DateStart).ToList();
+
+            // Check most recent session first (driver likely participated)
+            Driver? foundDriver = null;
+            Session? driverSession = null;
             
-            for (int year = 2022; year <= 2025; year++)
+            foreach (var session in raceSessions.Take(5)) // Check last 5 races only
             {
-                var sessions = await OpenF1Service.GetSessionsAsync(year);
-                
-                // Filter out Sprint sessions
-                var regularRaces = sessions.Where(s => 
-                    s.SessionType == "Race" && 
-                    (s.SessionName == null || !s.SessionName.Contains("Sprint", StringComparison.OrdinalIgnoreCase))
-                ).ToList();
-                
-                allSessions.AddRange(regularRaces);
+                try
+                {
+                    var drivers = await OpenF1Service.GetDriversAsync(session.SessionKey);
+                    foundDriver = drivers.FirstOrDefault(d => d.DriverNumber == DriverNumber);
+                    if (foundDriver != null)
+                    {
+                        driverSession = session;
+                        break;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
             }
 
-            var latestSession = allSessions
-                .Where(s => s.SessionType == "Race")
-                .OrderByDescending(s => s.DateStart)
-                .FirstOrDefault();
-
-            if (latestSession != null)
+            if (foundDriver == null || driverSession == null)
             {
-                var drivers = await OpenF1Service.GetDriversAsync(latestSession.SessionKey);
-                driver = drivers.FirstOrDefault(d => d.DriverNumber == DriverNumber);
-            }
-
-            if (driver == null)
-            {
-                errorMessage = "Driver not found.";
+                errorMessage = "Driver not found in any recent race sessions.";
                 return;
             }
 
-            isLoading = false;
+            driver = foundDriver;
+
             isLoadingStats = true;
-            StateHasChanged();
-
-            var raceSessions = allSessions
-                .Where(s => s.SessionType == "Race")
-                .OrderBy(s => s.DateStart)
-                .ToList();
-
-            totalRaces = raceSessions.Count;
-            var allPositions = new List<int>();
-
-            foreach (var year in new[] { 2025, 2024, 2023, 2022 })
-            {
-                var yearSessions = raceSessions.Where(s => s.Year == year).ToList();
-                var yearStats = new DriverStats();
-                var yearPositions = new List<int>();
-
-                foreach (var session in yearSessions)
-                {
-                    try
-                    {
-                        currentRaceIndex++;
-                        currentRaceName = $"{session.CountryName} - {session.CircuitShortName}";
-                        StateHasChanged();
-
-                        await Task.Delay(100);
-                        
-                        var positionsData = await OpenF1Service.GetPositionsAsync(session.SessionKey);
-                        var driverPositions = positionsData.Where(p => p.DriverNumber == DriverNumber).ToList();
-                        
-                        if (driverPositions.Count > 0)
-                        {
-                            var finalPosition = driverPositions.OrderBy(p => p.Date).Last().Position;
-                            
-                            if (finalPosition > 0)
-                            {
-                                yearStats.TotalRaces++;
-                                allStats.TotalRaces++;
-                                
-                                yearPositions.Add(finalPosition);
-                                allPositions.Add(finalPosition);
-                                
-                                var points = GetPointsForPosition(finalPosition);
-                                yearStats.Points += points;
-                                allStats.Points += points;
-                                
-                                if (finalPosition <= 3)
-                                {
-                                    yearStats.Podiums++;
-                                    allStats.Podiums++;
-                                }
-                            }
-                        }
-
-                        if (allPositions.Count > 0)
-                        {
-                            allStats.BestPosition = allPositions.Min();
-                            allStats.WorstPosition = allPositions.Max();
-                            allStats.AveragePosition = allPositions.Average();
-                        }
-
-                        StateHasChanged();
-                    }
-                    catch (HttpRequestException)
-                    {
-                        continue;
-                    }
-                    catch (TaskCanceledException)
-                    {
-                        continue;
-                    }
-                }
-
-                if (yearPositions.Count > 0)
-                {
-                    yearStats.BestPosition = yearPositions.Min();
-                    yearStats.WorstPosition = yearPositions.Max();
-                    yearStats.AveragePosition = yearPositions.Average();
-                }
-
-                if (yearStats.TotalRaces > 0)
-                {
-                    seasonStats[year] = yearStats;
-                }
-
-                StateHasChanged();
-            }
+            await LoadDriverStatsAndRaces(raceSessions);
         }
-        catch (HttpRequestException ex)
-        {
-            errorMessage = $"Error loading driver data: {ex.Message}";
-        }
-        catch (TaskCanceledException)
-        {
-            errorMessage = "Request timed out. Please try again.";
-        }
-        catch (InvalidOperationException ex)
+        catch (Exception ex)
         {
             errorMessage = $"Error loading driver data: {ex.Message}";
         }
@@ -178,7 +83,109 @@ public partial class DriverProfile
         }
     }
 
-    private static int GetPointsForPosition(int position)
+    private async Task LoadDriverStatsAndRaces(List<Session> raceSessions)
+    {
+        totalRaces = raceSessions.Count;
+        seasonStats.Clear();
+        seasonRaces.Clear();
+        allStats = new DriverStats();
+        
+        // Track positions for actual average calculation
+        var seasonPositions = new Dictionary<int, List<int>>();
+        var allPositions = new List<int>();
+
+        foreach (var (session, index) in raceSessions.Select((s, i) => (s, i)))
+        {
+            currentRaceIndex = index + 1;
+            currentRaceName = $"{session.CountryName} Grand Prix";
+            StateHasChanged(); // Show progress
+
+            try
+            {
+                await Task.Delay(100); // Prevent rate limiting
+                var positions = await OpenF1Service.GetPositionsAsync(session.SessionKey);
+                var driverPositions = positions.Where(p => p.DriverNumber == DriverNumber).ToList();
+
+                if (!driverPositions.Any()) continue;
+
+                var startPosition = driverPositions.OrderBy(p => p.Date).First().Position;
+                var finalPosition = driverPositions.OrderBy(p => p.Date).Last().Position;
+                var points = GetRacePoints(finalPosition);
+
+                // Update season stats
+                if (!seasonStats.ContainsKey(session.Year))
+                {
+                    seasonStats[session.Year] = new DriverStats();
+                    seasonRaces[session.Year] = new();
+                    seasonPositions[session.Year] = new();
+                }
+
+                var stats = seasonStats[session.Year];
+                stats.TotalRaces++;
+                allStats.TotalRaces++;
+                
+                // Track positions for average
+                seasonPositions[session.Year].Add(finalPosition);
+                allPositions.Add(finalPosition);
+
+                if (finalPosition <= 3)
+                {
+                    stats.Podiums++;
+                    allStats.Podiums++;
+                }
+
+                if (finalPosition < stats.BestPosition)
+                    stats.BestPosition = finalPosition;
+                if (finalPosition < allStats.BestPosition)
+                    allStats.BestPosition = finalPosition;
+
+                if (finalPosition > stats.WorstPosition)
+                    stats.WorstPosition = finalPosition;
+                if (finalPosition > allStats.WorstPosition)
+                    allStats.WorstPosition = finalPosition;
+
+                stats.Points += points;
+                allStats.Points += points;
+
+                // Add race result
+                seasonRaces[session.Year].Add(new RaceResult
+                {
+                    RaceName = $"{session.CountryName} Grand Prix",
+                    RaceDate = session.DateStart,
+                    StartPosition = startPosition,
+                    FinishPosition = finalPosition,
+                    PositionChange = startPosition - finalPosition,
+                    Points = points
+                });
+            }
+            catch
+            {
+                // Skip races with errors
+            }
+
+            StateHasChanged();
+        }
+
+
+        foreach (var (year, positions) in seasonPositions)
+        {
+            if (positions.Count > 0)
+                seasonStats[year].AveragePosition = positions.Average();
+        }
+
+        if (allPositions.Count > 0)
+            allStats.AveragePosition = allPositions.Average();
+    }
+
+    private void ToggleSeason(int year)
+    {
+        if (expandedSeasons.Contains(year))
+            expandedSeasons.Remove(year);
+        else
+            expandedSeasons.Add(year);
+    }
+
+    private static int GetRacePoints(int position)
     {
         return position switch
         {
@@ -198,7 +205,17 @@ public partial class DriverProfile
 
     private static string GetCountryFlag(string countryCode)
     {
-        if (string.IsNullOrEmpty(countryCode)) return "";
-        return $"https://flagcdn.com/w320/{countryCode.ToLowerInvariant()}.png";
+        return $"https://flagcdn.com/w80/{countryCode.ToLowerInvariant()}.png";
     }
+}
+
+// Helper class for race-by-race results
+public class RaceResult
+{
+    public string RaceName { get; set; } = "";
+    public DateTime RaceDate { get; set; }
+    public int StartPosition { get; set; }
+    public int FinishPosition { get; set; }
+    public int PositionChange { get; set; }
+    public int Points { get; set; }
 }

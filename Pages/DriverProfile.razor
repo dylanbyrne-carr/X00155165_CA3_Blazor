@@ -44,13 +44,23 @@
 
         @if (isLoadingStats)
         {
-            <div class="bg-f1-dark rounded-lg p-4 mb-6 text-center">
-                <p class="text-gray-400">Loading race @currentRaceIndex of @totalRaces</p>
-                @if (!string.IsNullOrEmpty(currentRaceName))
-                {
-                    <p class="text-white font-medium">@currentRaceName</p>
-                }
+            <div class="bg-f1-gray rounded-lg p-6 mb-6">
+                <div class="text-center mb-4">
+                    <p class="text-xl text-white font-bold mb-2">Loading Driver Statistics</p>
+                    <p class="text-gray-400">Processing race @currentRaceIndex of @totalRaces</p>
+                    @if (!string.IsNullOrEmpty(currentRaceName))
+                    {
+                        <p class="text-white font-medium mt-2">@currentRaceName</p>
+                    }
+                </div>
+                
+                <div class="w-full bg-f1-dark rounded-full h-4">
+                    <div class="bg-f1-red h-4 rounded-full transition-all" style="width: @((currentRaceIndex * 100.0 / totalRaces).ToString("F1"))%"></div>
+                </div>
+                
+                <p class="text-center text-gray-400 mt-2 text-sm">@((currentRaceIndex * 100.0 / totalRaces).ToString("F0"))% complete</p>
             </div>
+        }
         }
 
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
@@ -114,6 +124,55 @@
                                 <p class="text-2xl font-bold text-blue-500">@(stats.AveragePosition > 0 ? stats.AveragePosition.ToString("F1") : "N/A")</p>
                             </div>
                         </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="bg-f1-gray rounded-lg p-6">
+            <h2 class="text-2xl font-bold mb-4 text-white">Race-by-Race Breakdown</h2>
+            <div class="space-y-4">
+                @foreach (var season in seasonRaces.OrderByDescending(s => s.Key))
+                {
+                    <div class="bg-f1-dark rounded-lg overflow-hidden">
+                        <button @onclick="() => ToggleSeason(season.Key)"
+                                class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-700 transition text-white">
+                            <span class="text-xl font-bold">@season.Key Season (@season.Value.Count races)</span>
+                            <span class="text-2xl">@(expandedSeasons.Contains(season.Key) ? "−" : "+")</span>
+                        </button>
+                        
+                        @if (expandedSeasons.Contains(season.Key))
+                        {
+                            <div class="p-4 space-y-2">
+                                @foreach (var race in season.Value.OrderBy(r => r.RaceDate))
+                                {
+                                    var deltaClass = race.PositionChange > 0 ? "text-green-500" : race.PositionChange < 0 ? "text-red-500" : "text-gray-400";
+                                    var arrow = race.PositionChange > 0 ? "↑" : race.PositionChange < 0 ? "↓" : "→";
+                                    
+                                    <div class="bg-f1-gray rounded p-3 flex items-center justify-between">
+                                        <div class="flex-1">
+                                            <p class="font-bold text-white">@race.RaceName</p>
+                                            <p class="text-sm text-gray-400">@race.RaceDate.ToString("MMM dd, yyyy")</p>
+                                        </div>
+                                        <div class="flex items-center gap-4">
+                                            <div class="text-center">
+                                                <p class="text-xs text-gray-400">Start</p>
+                                                <p class="text-lg font-bold text-white">P@(race.StartPosition)</p>
+                                            </div>
+                                            <span class="text-2xl @deltaClass">@arrow</span>
+                                            <div class="text-center">
+                                                <p class="text-xs text-gray-400">Finish</p>
+                                                <p class="text-lg font-bold text-white">P@(race.FinishPosition)</p>
+                                            </div>
+                                            <div class="text-center">
+                                                <p class="text-xs text-gray-400">Points</p>
+                                                <p class="text-lg font-bold text-purple-500">@race.Points</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
                 }
             </div>
