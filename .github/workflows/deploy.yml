@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, test]
   workflow_dispatch:
 
 permissions:
@@ -57,8 +57,9 @@ jobs:
     - name: Publish
       run: dotnet publish F1RaceAnalytics.csproj -c Release -o release/publish
 
-    - name: Change base-tag in index.html
-      run: sed -i 's|<base href="/" />|<base href="/X00155165_CA3_Blazor/" />|g' release/publish/wwwroot/index.html
+    #- name: Change base-tag in index.html
+      #run: sed -i 's|<base href="/" />|<base href="/X00155165_CA3_Blazor/" />|g' release/publish/wwwroot/index.html
+      
     
     - name: Create 404.html for SPA routing
       run: |
