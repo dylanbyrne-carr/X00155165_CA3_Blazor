@@ -35,19 +35,17 @@
   </head>
 
   <body class="bg-f1-dark text-white">
-    <div id="app">
-      <svg class="loading-progress">
-        <circle r="40%" cx="50%" cy="50%" />
-        <circle r="40%" cx="50%" cy="50%" />
-      </svg>
-      <div class="loading-progress-text"></div>
+    <div id="app" class="flex flex-col items-center justify-center h-screen">
+      <div class="animate-spin rounded-full h-32 w-32 border-t-4 border-b-4 border-f1-red"></div>
+      <div class="text-white mt-4 text-xl">Loading F1 Race Analytics...</div>
     </div>
 
-    <div id="blazor-error-ui">
+    <div id="blazor-error-ui" class="hidden fixed bottom-0 left-0 right-0 bg-red-600 text-white p-4 text-center z-50">
       An unhandled error has occurred.
-      <a href="" class="reload">Reload</a>
-      <a class="dismiss">🗙</a>
+      <a href="" class="underline ml-2">Reload</a>
+      <a class="dismiss underline ml-2 cursor-pointer">🗙</a>
     </div>
+    
     <script src="_framework/blazor.webassembly.js"></script>
   </body>
 </html>
