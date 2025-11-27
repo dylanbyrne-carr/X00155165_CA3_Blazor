@@ -1,6 +1,6 @@
 namespace F1RaceAnalytics.Models;
 
-internal class Driver
+public class Driver
 {
     public int DriverNumber { get; set; }
     public string BroadcastName { get; set; } = string.Empty;
@@ -9,4 +9,5 @@ internal class Driver
     public string TeamName { get; set; } = string.Empty;
     public string TeamColour { get; set; } = string.Empty;
     public string? HeadshotUrl { get; set; }
+    public string? CountryCode { get; set; }
 }

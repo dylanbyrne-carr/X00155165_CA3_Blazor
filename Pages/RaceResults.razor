@@ -1,545 +1,195 @@
 @page "/race/{SessionKey:int}"
-@using F1RaceAnalytics.Models
-@using F1RaceAnalytics.Services
-@using ApexCharts
-@inject OpenF1Service OpenF1Service
-
 <PageTitle>Race Results</PageTitle>
 
 <div class="max-w-7xl mx-auto">
     @if (isLoading)
     {
         <div class="text-center py-20">
-            <p class="text-xl">Loading race data...</p>
+            <p class="text-xl text-white">Loading race data...</p>
         </div>
     }
     else if (errorMessage != null)
     {
         <div class="bg-red-900 border border-red-700 rounded p-4 mb-6">
-            <p>@errorMessage</p>
+            <p class="text-white">@errorMessage</p>
         </div>
     }
     else
     {
         <nav class="flex items-center gap-2 text-sm mb-6">
-            <a href="./" class="text-gray-400 hover:text-white transition">Home</a> <!-- this line-->
+            <a href="./" class="text-gray-400 hover:text-white transition">Home</a>
             <span class="text-gray-600">/</span>
-            <span class="text-gray-400">@session?.Year</span>
-            <span class="text-gray-600">/</span>
-            <span class="text-white">@session?.CircuitShortName</span>
+            <span class="text-white">@raceTitle</span>
         </nav>
 
-        <h2 class="text-3xl font-bold mb-2">@session?.SessionName</h2>
-        <p class="text-gray-400 mb-8">@session?.CircuitShortName - @session?.CountryName</p>
-
         <div class="bg-f1-gray rounded-lg p-6 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-xl font-bold">Race Results</h3>
-                <div class="flex items-center gap-4 text-sm text-gray-400">
-                    <span class="flex items-center gap-2">
-                        <span class="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center text-xs font-bold text-white">S</span>
-                        Soft
-                    </span>
-                    <span class="flex items-center gap-2">
-                        <span class="w-5 h-5 rounded-full bg-yellow-400 flex items-center justify-center text-xs font-bold text-black">M</span>
-                        Medium
-                    </span>
-                    <span class="flex items-center gap-2">
-                        <span class="w-5 h-5 rounded-full bg-white flex items-center justify-center text-xs font-bold text-black">H</span>
-                        Hard
-                    </span>
-                </div>
-            </div>
-            <div class="space-y-1">
-                @foreach (var result in showAllResults ? raceResults : raceResults.Take(3))
+            <div class="flex items-start gap-6">
+                @if (!string.IsNullOrEmpty(trackImageUrl))
                 {
-                    var rowBg = result.Position switch
-                    {
-                        1 when !result.Dnf && !result.Dns && !result.Dsq => "bg-gradient-to-r from-yellow-500/20 to-transparent",
-                        2 when !result.Dnf && !result.Dns && !result.Dsq => "bg-gradient-to-r from-gray-300/20 to-transparent",
-                        3 when !result.Dnf && !result.Dns && !result.Dsq => "bg-gradient-to-r from-amber-600/20 to-transparent",
-                        _ => "bg-f1-dark"
-                    };
-                    var hasFastestLap = result.Driver.DriverNumber == fastestLapDriverNumber;
-
-                    <div class="flex items-center gap-3 p-3 rounded @rowBg">
-                        <span class="text-2xl font-bold w-10 text-center">
-                            @if (result.Dns)
-                            {
-                                <span class="text-gray-500 text-sm">DNS</span>
-                            }
-                            else if (result.Dnf)
-                            {
-                                <span class="text-gray-500 text-sm">DNF</span>
-                            }
-                            else if (result.Dsq)
-                            {
-                                <span class="text-gray-500 text-sm">DSQ</span>
-                            }
-                            else
-                            {
-                                @result.Position
-                            }
-                        </span>
-
-                        @if (!string.IsNullOrEmpty(result.Driver.HeadshotUrl))
-                        {
-                            <img src="@result.Driver.HeadshotUrl" alt="@result.Driver.NameAcronym" class="w-10 h-10 rounded-full object-cover bg-f1-gray" />
-                        }
-                        else
-                        {
-                            <div class="w-10 h-10 rounded-full bg-f1-dark flex items-center justify-center text-sm font-bold">
-                                @result.Driver.NameAcronym?.Substring(0, 1)
-                            </div>
-                        }
-
-                        <div class="w-1 h-10 rounded" style="background-color: #@result.Driver.TeamColour;"></div>
-
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2">
-                                <p class="font-bold truncate">@result.Driver.FullName</p>
-                                @if (hasFastestLap)
-                                {
-                                    <span class="bg-purple-600 text-white text-xs px-2 py-0.5 rounded cursor-help flex-shrink-0" title="Fastest Lap: @fastestLapTime - The driver who sets the fastest lap of the race receives 1 bonus point (if finishing in top 10)">
-                                        FL
-                                    </span>
-                                }
-                            </div>
-                            <p class="text-sm text-gray-400 truncate">@result.Driver.TeamName</p>
-                        </div>
-
-                        <div class="flex items-center gap-1 flex-shrink-0" title="Tire Strategy">
-                            @if (driverStints.ContainsKey(result.Driver.DriverNumber))
-                            {
-                                @foreach (var stint in driverStints[result.Driver.DriverNumber].Where(s => s.LapStart.HasValue))
-                                {
-                                    <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold cursor-help @GetTyreClass(stint.Compound)" title="@stint.Compound: Laps @stint.LapStart-@stint.LapEnd">
-                                        @GetTyreLetter(stint.Compound)
-                                    </span>
-                                }
-                            }
-                        </div>
-
-                        <div class="w-12 text-center flex-shrink-0">
-                            @if (!result.Dns && !result.Dnf && !result.Dsq)
-                            {
-                                @if (result.PositionDelta > 0)
-                                {
-                                    <span class="text-green-500 font-bold">▲@result.PositionDelta</span>
-                                }
-                                else if (result.PositionDelta < 0)
-                                {
-                                    <span class="text-red-500 font-bold">▼@Math.Abs(result.PositionDelta)</span>
-                                }
-                                else
-                                {
-                                    <span class="text-gray-500">-</span>
-                                }
-                            }
-                        </div>
-
-                        <div class="w-16 text-right flex-shrink-0">
-                            @if (result.Points > 0)
-                            {
-                                <span class="text-white font-bold">+@result.Points pts</span>
-                            }
-                        </div>
+                    <div class="hidden lg:block lg:w-96">
+                        <img src="@trackImageUrl" alt="Track map" class="w-full rounded-lg" />
                     </div>
                 }
-            </div>
-            
-            @if (raceResults.Count > 3)
-            {
-                <button @onclick="ToggleResults" class="w-full mt-4 py-2 text-gray-400 hover:text-white transition flex items-center justify-center gap-2">
-                    @if (showAllResults)
-                    {
-                        <span>Show Podium Only</span>
-                        <span>▲</span>
-                    }
-                    else
-                    {
-                        <span>Show All @raceResults.Count Drivers</span>
-                        <span>▼</span>
-                    }
-                </button>
-            }
-        </div>
-
-        <div class="bg-f1-gray rounded-lg p-6 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-xl font-bold">Fastest Lap Comparison</h3>
-                @if (!string.IsNullOrEmpty(fastestLapTime))
-                {
-                    <span class="text-purple-400 font-mono">Best: @fastestLapTime</span>
-                }
-            </div>
-            @if (lapChartData.Any())
-            {
-                <ApexChart TItem="LapChartData"
-                           Title=""
-                           Options="lapChartOptions"
-                           Height="450">
-                    <ApexPointSeries TItem="LapChartData"
-                                     Items="lapChartData"
-                                     Name="Lap Time"
-                                     SeriesType="SeriesType.Bar"
-                                     XValue="@(e => e.DriverName)"
-                                     YValue="@(e => (decimal)e.GapToFastest)"
-                                     PointColor="@(e => e.TeamColour)" />
-                </ApexChart>
-            }
-            else
-            {
-                <p class="text-gray-400">No lap time data available</p>
-            }
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div class="bg-f1-gray rounded-lg p-6">
-                <h3 class="text-xl font-bold mb-4">Fastest Laps</h3>
-                @if (fastestLaps.Any())
-                {
-                    <div class="space-y-2">
-                        @foreach (var lap in fastestLaps.Take(10))
-                        {
-                            var driver = raceResults.FirstOrDefault(r => r.Driver.DriverNumber == lap.DriverNumber)?.Driver;
-                            var isOverallFastest = lap.DriverNumber == fastestLapDriverNumber;
-                            @if (driver != null)
-                            {
-                                <div class="flex items-center gap-3 p-2 rounded @(isOverallFastest ? "bg-purple-600/20" : "bg-f1-dark")">
-                                    <div class="w-1 h-6 rounded" style="background-color: #@driver.TeamColour;"></div>
-                                    <span class="font-bold w-12">@driver.NameAcronym</span>
-                                    <span class="text-gray-400 text-sm">Lap @lap.LapNumber</span>
-                                    <span class="ml-auto font-mono @(isOverallFastest ? "text-purple-400" : "")">@FormatLapTime(lap.LapDuration)</span>
-                                </div>
-                            }
-                        }
-                    </div>
-                }
-                else
-                {
-                    <p class="text-gray-400">No lap time data available</p>
-                }
-            </div>
-
-            <div class="bg-f1-gray rounded-lg p-6">
-                <h3 class="text-xl font-bold mb-4">Race Statistics</h3>
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
-                        <span class="text-gray-400">Total Drivers</span>
-                        <span class="font-bold">@raceResults.Count</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
-                        <span class="text-gray-400">Finishers</span>
-                        <span class="font-bold">@raceResults.Count(r => !r.Dnf && !r.Dns && !r.Dsq)</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
-                        <span class="text-gray-400">Retirements</span>
-                        <span class="font-bold">@raceResults.Count(r => r.Dnf)</span>
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
-                        <span class="text-gray-400">Most Positions Gained</span>
-                        @{
-                            var bestGainer = raceResults.Where(r => !r.Dnf && !r.Dns && !r.Dsq).OrderByDescending(r => r.PositionDelta).FirstOrDefault();
-                        }
-                        @if (bestGainer != null && bestGainer.PositionDelta > 0)
-                        {
-                            <span class="font-bold text-green-500">@bestGainer.Driver.NameAcronym (+@bestGainer.PositionDelta)</span>
-                        }
-                        else
-                        {
-                            <span class="font-bold">-</span>
-                        }
-                    </div>
-                    <div class="flex justify-between items-center p-3 bg-f1-dark rounded">
-                        <span class="text-gray-400">Most Positions Lost</span>
-                        @{
-                            var worstLoser = raceResults.Where(r => !r.Dnf && !r.Dns && !r.Dsq).OrderBy(r => r.PositionDelta).FirstOrDefault();
-                        }
-                        @if (worstLoser != null && worstLoser.PositionDelta < 0)
-                        {
-                            <span class="font-bold text-red-500">@worstLoser.Driver.NameAcronym (@worstLoser.PositionDelta)</span>
-                        }
-                        else
-                        {
-                            <span class="font-bold">-</span>
-                        }
-                    </div>
+                <div class="flex-1">
+                    <h1 class="text-4xl font-bold mb-2 text-white">@raceTitle</h1>
+                    <p class="text-xl text-gray-400">@raceDate</p>
                 </div>
             </div>
         </div>
+
+        <div class="bg-f1-gray rounded-lg p-6 mb-6">
+            <h2 class="text-2xl font-bold mb-4 text-white">Race Results</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-white">
+                    <thead class="bg-f1-dark">
+                        <tr>
+                            <th class="p-3">Pos</th>
+                            <th class="p-3">Driver</th>
+                            <th class="p-3">Team</th>
+                            <th class="p-3">Pit Stops</th>
+                            <th class="p-3">Best Lap</th>
+                            <th class="p-3 text-right">Points</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var standing in driverStandings.Take(20))
+                        {
+                            var bgClass = standing.Position switch
+                            {
+                                1 => "bg-yellow-900 bg-opacity-30",
+                                2 => "bg-gray-600 bg-opacity-30",
+                                3 => "bg-orange-900 bg-opacity-30",
+                                _ => standing.Position % 2 == 0 ? "bg-f1-dark" : ""
+                            };
+                            
+                            <tr class="@bgClass border-b border-gray-700 hover:bg-gray-700 transition">
+                                <td class="p-3">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-bold">@standing.Position</span>
+                                        @if (standing.PositionDelta != 0)
+                                        {
+                                            var deltaClass = standing.PositionDelta > 0 ? "text-green-500" : "text-red-500";
+                                            var arrow = standing.PositionDelta > 0 ? "↑" : "↓";
+                                            <span class="text-sm @deltaClass">@arrow@Math.Abs(standing.PositionDelta)</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="p-3">
+                                    <div class="flex items-center gap-3">
+                                        @if (!string.IsNullOrEmpty(standing.HeadshotUrl))
+                                        {
+                                            <img src="@standing.HeadshotUrl" alt="@standing.DriverName" class="w-10 h-10 rounded-full"/>
+                                        }
+                                        <div>
+                                            <div class="font-bold">@standing.DriverName</div>
+                                            <div class="text-sm text-gray-400">#@standing.DriverNumber</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="p-3">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-3 h-3 rounded" style="background-color: #@standing.TeamColour;"></div>
+                                        <span>@standing.TeamName</span>
+                                    </div>
+                                </td>
+                                <td class="p-3">@standing.PitStops</td>
+                                <td class="p-3">
+                                    @if (standing.BestLapTime > 0)
+                                    {
+                                        <span class="@(standing.HasFastestLap ? "text-purple-400 font-bold" : "")">
+                                            @FormatLapTime(standing.BestLapTime)
+                                            @if (standing.HasFastestLap)
+                                            {
+                                                <span class="ml-1">⚡</span>
+                                            }
+                                        </span>
+                                    }
+                                </td>
+                                <td class="p-3 text-right font-bold">@GetRacePoints(standing.Position)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="bg-f1-gray rounded-lg p-6">
+                <h2 class="text-2xl font-bold mb-4 text-white">Tire Strategy</h2>
+                <div class="space-y-3">
+                    @foreach (var driver in driverStandings.Take(10))
+                    {
+                        <div class="bg-f1-dark rounded p-3">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="font-bold text-white">P@driver.Position</span>
+                                <span class="text-gray-400">@driver.DriverName</span>
+                            </div>
+                            <div class="flex gap-1">
+                                @foreach (var stint in driver.TireStints)
+                                {
+                                    var color = stint.Compound switch
+                                    {
+                                        "SOFT" => "bg-red-500",
+                                        "MEDIUM" => "bg-yellow-500",
+                                        "HARD" => "bg-gray-300",
+                                        "INTERMEDIATE" => "bg-green-500",
+                                        "WET" => "bg-blue-500",
+                                        _ => "bg-gray-500"
+                                    };
+                                    
+                                    <div class="@color h-6 rounded flex items-center justify-center text-xs font-bold text-black"
+                                         style="width: @(stint.Laps * 3)px; min-width: 30px;"
+                                         title="@stint.Compound - @stint.Laps laps">
+                                        @stint.Compound[0]
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="bg-f1-gray rounded-lg p-6">
+                <h2 class="text-2xl font-bold mb-4 text-white">Fastest Lap Comparison</h2>
+                <div class="space-y-2">
+                    @foreach (var driver in driverStandings.OrderBy(d => d.BestLapTime).Where(d => d.BestLapTime > 0).Take(10))
+                    {
+                        var isGlobal = driver.HasFastestLap;
+                        var barColor = isGlobal ? "bg-purple-500" : "bg-f1-red";
+                        var fastestLap = driverStandings.Where(d => d.BestLapTime > 0).Min(d => d.BestLapTime);
+                        var percentage = (driver.BestLapTime / fastestLap) * 100 - 100;
+                        var barWidth = 100 - (percentage * 10);
+
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-gray-400 w-8">P@driver.Position</span>
+                            <span class="text-white font-medium w-32 truncate">@driver.DriverName</span>
+                            <div class="flex-1 bg-gray-700 rounded h-6 relative">
+                                <div class="@barColor h-full rounded transition-all" style="width: @(barWidth)%"></div>
+                            </div>
+                            <span class="text-white text-sm w-20 text-right">
+                                @FormatLapTime(driver.BestLapTime)
+                                @if (isGlobal)
+                                {
+                                    <span class="ml-1">⚡</span>
+                                }
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(chartDataJson))
+        {
+            <div class="bg-f1-gray rounded-lg p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-4 text-white">Position Changes</h2>
+                <div id="positionChart" style="min-height: 400px;"></div>
+            </div>
+
+            <div class="bg-f1-gray rounded-lg p-6">
+                <h2 class="text-2xl font-bold mb-4 text-white">Lap Times</h2>
+                <div id="lapTimesChart" style="min-height: 400px;"></div>
+            </div>
+        }
     }
 </div>
-
-@code {
-    [Parameter]
-    public int SessionKey { get; set; }
-
-    private Session? session;
-    private List<DriverStanding> raceResults = new();
-    private Dictionary<int, List<Stint>> driverStints = new();
-    private List<Lap> fastestLaps = new();
-    private List<LapChartData> lapChartData = new();
-    private int fastestLapDriverNumber;
-    private string fastestLapTime = "";
-    private bool isLoading = true;
-    private string? errorMessage = null;
-    private bool showAllResults = false;
-
-    private readonly int[] pointsSystem = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 };
-
-    private ApexChartOptions<LapChartData> lapChartOptions = new()
-    {
-        Chart = new Chart
-        {
-            Background = "transparent",
-            Toolbar = new Toolbar { Show = false }
-        },
-        Theme = new Theme { Mode = Mode.Dark },
-        PlotOptions = new PlotOptions
-        {
-            Bar = new PlotOptionsBar
-            {
-                Horizontal = true,
-                BorderRadius = 4
-            }
-        },
-        Xaxis = new XAxis
-        {
-            Title = new AxisTitle { Text = "Gap to Fastest (seconds)" },
-            Labels = new XAxisLabels
-            {
-                Formatter = "function(val) { return '+' + val.toFixed(2) + 's'; }"
-            }
-        },
-        Yaxis = new List<YAxis>
-        {
-            new YAxis
-            {
-                Labels = new YAxisLabels
-                {
-                    Style = new AxisLabelStyle { FontSize = "12px" }
-                }
-            }
-        },
-        Grid = new Grid { BorderColor = "#38383f" },
-        Tooltip = new Tooltip
-        {
-            Y = new TooltipY
-            {
-                Formatter = "function(val) { return '+' + val.toFixed(3) + 's'; }"
-            }
-        },
-        DataLabels = new DataLabels
-        {
-            Enabled = true,
-            Formatter = "function(val) { return '+' + val.toFixed(2) + 's'; }",
-            Style = new DataLabelsStyle { FontSize = "11px" }
-        }
-    };
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadRaceData();
-    }
-
-    private void ToggleResults()
-    {
-        showAllResults = !showAllResults;
-    }
-
-    private async Task LoadRaceData()
-    {
-        isLoading = true;
-        errorMessage = null;
-
-        try
-        {
-            session = await OpenF1Service.GetSessionAsync(SessionKey);
-            var drivers = await OpenF1Service.GetDriversAsync(SessionKey);
-            var positions = await OpenF1Service.GetPositionsAsync(SessionKey);
-            var sessionResults = await OpenF1Service.GetSessionResultsAsync(SessionKey);
-            var laps = await OpenF1Service.GetLapsAsync(SessionKey);
-            var stints = await OpenF1Service.GetStintsAsync(SessionKey);
-
-            var driverDict = drivers
-                .GroupBy(d => d.DriverNumber)
-                .ToDictionary(g => g.Key, g => g.First());
-
-            driverStints = stints
-                .GroupBy(s => s.DriverNumber)
-                .ToDictionary(g => g.Key, g => g.OrderBy(s => s.StintNumber).ToList());
-
-            // Get fastest lap per driver
-            fastestLaps = laps
-                .Where(l => l.LapDuration.HasValue && l.LapDuration > 0)
-                .GroupBy(l => l.DriverNumber)
-                .Select(g => g.OrderBy(l => l.LapDuration).First())
-                .OrderBy(l => l.LapDuration)
-                .ToList();
-
-            var validLaps = laps.Where(l => l.LapDuration.HasValue && l.LapDuration > 0).ToList();
-            double fastestLapDuration = 0;
-            if (validLaps.Any())
-            {
-                var fastest = validLaps.OrderBy(l => l.LapDuration).First();
-                fastestLapDriverNumber = fastest.DriverNumber;
-                fastestLapDuration = fastest.LapDuration!.Value;
-                fastestLapTime = FormatLapTime(fastest.LapDuration);
-            }
-
-            // Build lap chart data
-            lapChartData = fastestLaps
-                .Where(l => driverDict.ContainsKey(l.DriverNumber))
-                .Take(15)
-                .Select(l =>
-                {
-                    var driver = driverDict[l.DriverNumber];
-                    return new LapChartData
-                    {
-                        DriverName = driver.NameAcronym,
-                        LapTime = l.LapDuration!.Value,
-                        GapToFastest = l.LapDuration!.Value - fastestLapDuration,
-                        TeamColour = $"#{driver.TeamColour}"
-                    };
-                })
-                .ToList();
-
-            var startingPositions = positions
-                .GroupBy(p => p.DriverNumber)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.OrderBy(p => p.Date).First().Position
-                );
-
-            var finishingPositions = positions
-                .GroupBy(p => p.DriverNumber)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.OrderBy(p => p.Date).Last().Position
-                );
-
-            if (sessionResults.Any())
-            {
-                var resultsOrdered = sessionResults
-                    .Where(r => driverDict.ContainsKey(r.DriverNumber))
-                    .OrderBy(r => r.Dns || r.Dnf || r.Dsq ? 100 + r.Position : r.Position)
-                    .ToList();
-
-                raceResults = resultsOrdered
-                    .Select(r =>
-                    {
-                        var startPos = startingPositions.GetValueOrDefault(r.DriverNumber, 0);
-                        var delta = startPos - r.Position;
-                        var points = (!r.Dnf && !r.Dns && !r.Dsq && r.Position > 0 && r.Position <= 10)
-                            ? pointsSystem[r.Position - 1]
-                            : 0;
-
-                        if (r.DriverNumber == fastestLapDriverNumber && points > 0)
-                        {
-                            points += 1;
-                        }
-
-                        return new DriverStanding
-                        {
-                            Position = r.Position,
-                            StartPosition = startPos,
-                            Driver = driverDict[r.DriverNumber],
-                            Points = points,
-                            PositionDelta = delta,
-                            Dnf = r.Dnf,
-                            Dns = r.Dns,
-                            Dsq = r.Dsq
-                        };
-                    })
-                    .ToList();
-            }
-            else
-            {
-                // Fallback: build results from position data
-                var maxLapByDriver = laps
-                    .GroupBy(l => l.DriverNumber)
-                    .ToDictionary(g => g.Key, g => g.Max(l => l.LapNumber));
-
-                var totalRaceLaps = maxLapByDriver.Values.Any() ? maxLapByDriver.Values.Max() : 0;
-                var dnfThreshold = totalRaceLaps - 3;
-
-                raceResults = finishingPositions
-                    .Where(kvp => driverDict.ContainsKey(kvp.Key))
-                    .Select(kvp =>
-                    {
-                        var startPos = startingPositions.GetValueOrDefault(kvp.Key, 0);
-                        var finishPos = kvp.Value;
-                        var delta = startPos - finishPos;
-
-                        var driverLaps = maxLapByDriver.GetValueOrDefault(kvp.Key, 0);
-                        var isDnf = driverLaps < dnfThreshold && driverLaps > 0;
-
-                        var points = (!isDnf && finishPos > 0 && finishPos <= 10)
-                            ? pointsSystem[finishPos - 1]
-                            : 0;
-
-                        if (kvp.Key == fastestLapDriverNumber && points > 0)
-                        {
-                            points += 1;
-                        }
-
-                        return new DriverStanding
-                        {
-                            Position = finishPos,
-                            StartPosition = startPos,
-                            Driver = driverDict[kvp.Key],
-                            Points = points,
-                            PositionDelta = isDnf ? 0 : delta,
-                            Dnf = isDnf,
-                            Dns = false,
-                            Dsq = false
-                        };
-                    })
-                    .OrderBy(r => r.Dnf ? 100 + r.Position : r.Position)
-                    .ToList();
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Error loading race data: {ex.Message}";
-        }
-        finally
-        {
-            isLoading = false;
-        }
-    }
-
-    private string FormatLapTime(double? seconds)
-    {
-        if (!seconds.HasValue) return "-";
-        var duration = TimeSpan.FromSeconds(seconds.Value);
-        return $"{duration.Minutes}:{duration.Seconds:D2}.{duration.Milliseconds:D3}";
-    }
-
-    private string GetTyreClass(string compound)
-    {
-        return compound.ToUpper() switch
-        {
-            "SOFT" => "bg-red-500 text-white",
-            "MEDIUM" => "bg-yellow-400 text-black",
-            "HARD" => "bg-white text-black",
-            "INTERMEDIATE" => "bg-green-500 text-white",
-            "WET" => "bg-blue-500 text-white",
-            _ => "bg-gray-500 text-white"
-        };
-    }
-
-    private string GetTyreLetter(string compound)
-    {
-        return compound.ToUpper() switch
-        {
-            "SOFT" => "S",
-            "MEDIUM" => "M",
-            "HARD" => "H",
-            "INTERMEDIATE" => "I",
-            "WET" => "W",
-            _ => "?"
-        };
-    }
-}

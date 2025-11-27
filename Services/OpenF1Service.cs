@@ -35,7 +35,7 @@ public class OpenF1Service
         }
     }
 
-    internal Task<List<Session>> GetSessionsAsync(int year, string? countryName = null)
+    public Task<List<Session>> GetSessionsAsync(int year, string? countryName = null)
     {
         var url = $"sessions?year={year}";
         if (!string.IsNullOrEmpty(countryName))
@@ -45,52 +45,63 @@ public class OpenF1Service
         return FetchAsync<Session>(url);
     }
 
-    internal Task<List<Meeting>> GetMeetingsAsync(int year)
+    public Task<List<Meeting>> GetMeetingsAsync(int year)
     {
         var url = $"meetings?year={year}";
         return FetchAsync<Meeting>(url);
     }
 
-    internal Task<List<Driver>> GetDriversAsync(int sessionKey)
+    public Task<List<Driver>> GetDriversAsync(int sessionKey)
     {
         var url = $"drivers?session_key={sessionKey}";
         return FetchAsync<Driver>(url);
     }
 
-    internal Task<List<PositionData>> GetPositionsAsync(int sessionKey)
+    public Task<List<PositionData>> GetPositionsAsync(int sessionKey)
     {
         var url = $"position?session_key={sessionKey}";
         return FetchAsync<PositionData>(url);
     }
 
-    internal Task<List<Lap>> GetLapsAsync(int sessionKey)
+    public Task<List<Lap>> GetLapsAsync(int sessionKey)
     {
         var url = $"laps?session_key={sessionKey}";
         return FetchAsync<Lap>(url);
     }
 
-    internal Task<List<SessionResult>> GetSessionResultsAsync(int sessionKey)
+    public Task<List<SessionResult>> GetSessionResultsAsync(int sessionKey)
     {
         var url = $"session_results?session_key={sessionKey}";
         return FetchAsync<SessionResult>(url);
     }
 
-    internal Task<List<Stint>> GetStintsAsync(int sessionKey)
+    public Task<List<Stint>> GetStintsAsync(int sessionKey)
     {
         var url = $"stints?session_key={sessionKey}";
         return FetchAsync<Stint>(url);
     }
 
-    internal Task<List<PitStop>> GetPitStopsAsync(int sessionKey)
+    public Task<List<PitStop>> GetPitStopsAsync(int sessionKey)
     {
         var url = $"pit?session_key={sessionKey}";
         return FetchAsync<PitStop>(url);
     }
 
-    internal async Task<Session?> GetSessionAsync(int sessionKey)
+    public async Task<Session?> GetSessionAsync(int sessionKey)
     {
         var url = $"sessions?session_key={sessionKey}";
         var sessions = await FetchAsync<Session>(url);
         return sessions.FirstOrDefault();
+    }
+
+    public async Task<List<Session>> GetSessionsAsync(int startYear, int endYear)
+    {
+        var allSessions = new List<Session>();
+        for (int year = startYear; year <= endYear; year++)
+        {
+            var sessions = await GetSessionsAsync(year);
+            allSessions.AddRange(sessions);
+        }
+        return allSessions;
     }
 }

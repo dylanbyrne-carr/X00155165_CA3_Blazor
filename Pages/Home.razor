@@ -1,52 +1,114 @@
 ﻿@page "/"
-
 <PageTitle>F1 Race Analytics</PageTitle>
 
-<div class="max-w-7xl mx-auto">
-    <h2 class="text-3xl font-bold mb-8 text-white">Select a Race</h2>
-    
+<div class="max-w-7xl mx-auto space-y-8">
     @if (isLoading)
     {
         <div class="text-center py-20">
-            <p class="text-xl text-white">Loading races...</p>
+            <p class="text-xl text-white">Loading F1 data...</p>
         </div>
     }
     else if (errorMessage != null)
     {
-        <div class="bg-red-900 border border-red-700 rounded p-4 mb-6">
+        <div class="bg-red-900 border border-red-700 rounded p-4">
             <p class="text-white">@errorMessage</p>
         </div>
     }
     else
     {
+        <div class="bg-f1-gray rounded-lg p-6">
+            <h2 class="text-2xl font-bold mb-4 text-white">Driver Search</h2>
+            <div class="flex gap-4 mb-4">
+                <input type="text" 
+                       @bind="driverSearch" 
+                       @bind:event="oninput"
+                       placeholder="Search by driver name or number..."
+                       class="flex-1 px-4 py-2 bg-f1-dark text-white rounded-lg border-2 @GetSearchBorderClass()" />
+                <button @onclick="SearchDriver" 
+                        disabled="@(string.IsNullOrWhiteSpace(driverSearch) || isSearching)"
+                        class="px-6 py-2 bg-f1-red hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-medium text-white">
+                    @(isSearching ? "Searching..." : "Search")
+                </button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(searchError))
+            {
+                <div class="bg-red-900 border border-red-500 text-white p-3 rounded-lg mb-4">
+                    @searchError
+                </div>
+            }
+        </div>
+
+        <div class="bg-f1-gray rounded-lg p-6">
+            <h2 class="text-2xl font-bold mb-4 text-white">Race Explorer</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Year</label>
+                    <select @bind="selectedYear" @bind:after="OnYearChanged"
+                            class="w-full px-4 py-2 bg-f1-dark text-white rounded-lg border-2 border-gray-600">
+                        <option value="0">Select Year</option>
+                        <option value="2022">2022</option>
+                        <option value="2023">2023</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-2">Race</label>
+                    <select @bind="selectedRaceKey" 
+                            disabled="@(selectedYear == 0 || isLoadingRaces)"
+                            class="w-full px-4 py-2 bg-f1-dark text-white rounded-lg border-2 border-gray-600 disabled:opacity-50">
+                        <option value="0">Select Race</option>
+                        @foreach (var race in races)
+                        {
+                            <option value="@race.MeetingKey">@race.MeetingOfficialName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(raceError))
+            {
+                <div class="bg-red-900 border border-red-500 text-white p-3 rounded-lg mb-4">
+                    @raceError
+                </div>
+            }
+
+            <button @onclick="LoadRace" 
+                    disabled="@(selectedYear == 0 || selectedRaceKey == 0)"
+                    class="w-full px-6 py-3 bg-f1-red hover:bg-red-700 disabled:bg-gray-600 rounded-lg font-bold text-white">
+                View Race Details
+            </button>
+        </div>
+
         <div class="space-y-4">
+            <h2 class="text-2xl font-bold text-white">Browse All Races</h2>
             @foreach (var yearGroup in tracksByYear.OrderByDescending(y => y.Key))
             {
                 <div class="bg-f1-gray rounded-lg overflow-hidden">
                     <button @onclick="() => ToggleYear(yearGroup.Key)"
                             class="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-700 transition text-white">
                         <span class="text-xl font-bold">@yearGroup.Key Season</span>
-                        <span class="text-2xl">@(expandedYears.Contains(yearGroup.Key) ? "-" : "+")</span>
+                        <span class="text-2xl">@(expandedYears.Contains(yearGroup.Key) ? "−" : "+")</span>
                     </button>
                     
                     @if (expandedYears.Contains(yearGroup.Key))
                     {
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4 border-t border-gray-700">
+                        <div class="space-y-2 p-4 border-t border-gray-700">
                             @foreach (var track in yearGroup.Value)
                             {
-                                <div class="bg-f1-dark rounded-lg p-4">
-                                    <div class="aspect-video bg-f1-gray rounded-lg mb-3 flex items-center justify-center overflow-hidden">
-                                        <img src="@track.ImageUrl" 
-                                             alt="@track.CircuitShortName"
-                                             class="w-full h-full object-contain"/>
+                                <div class="bg-f1-dark rounded-lg p-4 hover:bg-gray-800 transition cursor-pointer flex items-center gap-4"
+                                     @onclick="() => ViewRaceResults(track)">
+                                    <img src="@track.FlagUrl" 
+                                         alt="@track.CountryName"
+                                         class="w-16 h-12 object-cover rounded"/>
+                                    
+                                    <div class="flex-1">
+                                        <h3 class="font-bold text-white">@track.MeetingOfficialName</h3>
+                                        <p class="text-sm text-gray-400">@track.CircuitShortName, @track.CountryName</p>
                                     </div>
                                     
-                                    <h3 class="text-lg font-bold mb-1 text-white">@track.MeetingOfficialName</h3>
-                                    <p class="text-sm text-gray-400 mb-1">@track.CircuitShortName</p>
-                                    <p class="text-sm text-gray-500 mb-3">@track.CountryName</p>
-                                    
-                                    <button @onclick="() => ViewRaceResults(track)"
-                                            class="w-full px-4 py-2 bg-f1-red hover:bg-red-700 rounded font-medium transition text-white">
+                                    <button class="px-4 py-2 bg-f1-red hover:bg-red-700 rounded font-medium transition text-white">
                                         View Results
                                     </button>
                                 </div>

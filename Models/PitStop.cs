@@ -1,9 +1,9 @@
 namespace F1RaceAnalytics.Models;
 
-internal class PitStop
+public class PitStop
 {
+    public DateTime Date { get; set; }
     public int DriverNumber { get; set; }
     public int LapNumber { get; set; }
     public double PitDuration { get; set; }
-    public double TotalTime { get; set; }
 }

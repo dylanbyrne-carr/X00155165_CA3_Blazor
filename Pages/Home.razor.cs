@@ -18,6 +18,17 @@ public partial class Home
     private string? errorMessage;
     private List<Session> allSessions = new();
 
+    private string driverSearch = "";
+    private bool isSearching;
+    private string? searchError;
+    private Driver? selectedDriver;
+
+    private int selectedYear;
+    private int selectedRaceKey;
+    private List<Meeting> races = new();
+    private bool isLoadingRaces;
+    private string? raceError;
+
     protected override async Task OnInitializedAsync()
     {
         await LoadAllData();
@@ -33,13 +44,19 @@ public partial class Home
             var allMeetings = new List<Meeting>();
             allSessions = new List<Session>();
             
-            for (int year = 2023; year <= 2025; year++)
+            for (int year = 2022; year <= 2025; year++)
             {
                 var meetings = await OpenF1Service.GetMeetingsAsync(year);
                 var sessions = await OpenF1Service.GetSessionsAsync(year);
                 
+                // Filter out Sprint sessions
+                var regularRaces = sessions.Where(s => 
+                    s.SessionType == "Race" && 
+                    (s.SessionName == null || !s.SessionName.Contains("Sprint", StringComparison.OrdinalIgnoreCase))
+                ).ToList();
+                
                 allMeetings.AddRange(meetings);
-                allSessions.AddRange(sessions);
+                allSessions.AddRange(regularRaces);
             }
 
             tracksByYear = allMeetings
@@ -53,7 +70,7 @@ public partial class Home
                         CircuitShortName = m.CircuitShortName,
                         CountryName = m.CountryName,
                         Year = m.Year,
-                        ImageUrl = GetTrackImageUrl(m.CircuitShortName)
+                        FlagUrl = GetCountryFlagUrl(m.CountryName)
                     }).ToList()
                 );
         }
@@ -67,10 +84,132 @@ public partial class Home
         }
     }
 
+    private async Task SearchDriver()
+    {
+        isSearching = true;
+        searchError = null;
+        selectedDriver = null;
+
+        try
+        {
+            var raceSessions = allSessions
+                .Where(s => s.SessionType == "Race")
+                .OrderByDescending(s => s.DateStart)
+                .ToList();
+
+            if (raceSessions.Count == 0)
+            {
+                searchError = "No race sessions available.";
+                return;
+            }
+
+            Session? sessionWithDriver = null;
+            Driver? foundDriver = null;
+
+            foreach (var session in raceSessions.Take(5))
+            {
+                try
+                {
+                    var drivers = await OpenF1Service.GetDriversAsync(session.SessionKey);
+
+                    foundDriver = drivers.FirstOrDefault(d =>
+                        d.FullName.Contains(driverSearch, StringComparison.OrdinalIgnoreCase) ||
+                        d.BroadcastName.Contains(driverSearch, StringComparison.OrdinalIgnoreCase) ||
+                        d.NameAcronym.Contains(driverSearch, StringComparison.OrdinalIgnoreCase) ||
+                        d.DriverNumber.ToString() == driverSearch);
+
+                    if (foundDriver != null)
+                    {
+                        sessionWithDriver = session;
+                        break;
+                    }
+                }
+                catch
+                {
+                    continue;
+                }
+            }
+
+            if (foundDriver == null)
+            {
+                searchError = $"No driver found matching '{driverSearch}'.";
+                return;
+            }
+
+            Navigation.NavigateTo($"/driver/{foundDriver.DriverNumber}");
+        }
+        catch (Exception ex)
+        {
+            searchError = $"Error searching driver: {ex.Message}";
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private string GetSearchBorderClass()
+    {
+        if (string.IsNullOrWhiteSpace(driverSearch)) return "border-gray-600";
+        return driverSearch.Length >= 1 ? "border-green-500" : "border-red-500";
+    }
+
+    private async Task OnYearChanged()
+    {
+        if (selectedYear == 0) return;
+
+        isLoadingRaces = true;
+        raceError = null;
+        selectedRaceKey = 0;
+        races = new();
+
+        try
+        {
+            if (selectedYear < 2022 || selectedYear > 2025)
+            {
+                raceError = "Please select a year between 2022 and 2025.";
+                return;
+            }
+
+            var meetings = await OpenF1Service.GetMeetingsAsync(selectedYear);
+            races = meetings.ToList();
+        }
+        catch (Exception ex)
+        {
+            raceError = $"Error loading races: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingRaces = false;
+        }
+    }
+
+    private void LoadRace()
+    {
+        if (selectedYear == 0 || selectedRaceKey == 0)
+        {
+            raceError = "Please select both year and race.";
+            return;
+        }
+
+        var raceSession = allSessions.FirstOrDefault(s =>
+            s.MeetingKey == selectedRaceKey &&
+            s.SessionType == "Race");
+
+        if (raceSession != null)
+        {
+            Navigation.NavigateTo($"race/{raceSession.SessionKey}");
+        }
+        else
+        {
+            raceError = "Race session not found.";
+        }
+    }
+
     private void ToggleYear(int year)
     {
         if(!expandedYears.Remove(year))
-            expandedYears.Add(year);;
+            expandedYears.Add(year);
     }
 
     private void ViewRaceResults(TrackInfo track)
@@ -89,50 +228,45 @@ public partial class Home
         }
     }
 
-    private static string GetTrackImageUrl(string circuitShortName)
+    private static string GetCountryFlagUrl(string countryName)
     {
-        var trackMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        var countryCodeMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Monaco"] = "Monaco_Circuit",
-            ["Monte Carlo"] = "Monaco_Circuit",
-            ["Monza"] = "Italy_Circuit",
-            ["Silverstone"] = "Great_Britain_Circuit",
-            ["Spa-Francorchamps"] = "Belgium_Circuit",
-            ["Suzuka"] = "Japan_Circuit",
-            ["Austin"] = "USA_Circuit",
-            ["Interlagos"] = "Brazil_Circuit",
-            ["Catalunya"] = "Spain_Circuit",
-            ["Barcelona"] = "Spain_Circuit",
-            ["Red Bull Ring"] = "Austria_Circuit",
-            ["Spielberg"] = "Austria_Circuit",
-            ["Zandvoort"] = "Netherlands_Circuit",
-            ["Hungaroring"] = "Hungary_Circuit",
-            ["Imola"] = "Emilia_Romagna_Circuit",
-            ["Miami"] = "Miami_Circuit",
-            ["Jeddah"] = "Saudi_Arabia_Circuit",
-            ["Melbourne"] = "Australia_Circuit",
-            ["Albert Park"] = "Australia_Circuit",
-            ["Sakhir"] = "Bahrain_Circuit",
-            ["Bahrain"] = "Bahrain_Circuit",
-            ["Shanghai"] = "China_Circuit",
-            ["Baku"] = "Baku_Circuit", // godhelpme whichone is the right baku
-            ["Azerbaijan"] = "Azerbaijan_Circuit",
-            ["Montreal"] = "Canada_Circuit",
-            ["Marina Bay"] = "Singapore_Circuit",
-            ["Singapore"] = "Singapore_Circuit",
-            ["Lusail"] = "Qatar_Circuit",
-            ["Yas Marina"] = "Abu_Dhabi_Circuit",
-            ["Las Vegas"] = "Las_Vegas_Circuit",
-            ["Mexico City"] = "Mexico_Circuit"
+            ["Australia"] = "au",
+            ["Austria"] = "at",
+            ["Azerbaijan"] = "az",
+            ["Bahrain"] = "bh",
+            ["Belgium"] = "be",
+            ["Brazil"] = "br",
+            ["Canada"] = "ca",
+            ["China"] = "cn",
+            ["Netherlands"] = "nl",
+            ["Emilia Romagna"] = "it",
+            ["France"] = "fr",
+            ["Great Britain"] = "gb",
+            ["Hungary"] = "hu",
+            ["Italy"] = "it",
+            ["Japan"] = "jp",
+            ["Mexico"] = "mx",
+            ["Monaco"] = "mc",
+            ["Qatar"] = "qa",
+            ["Saudi Arabia"] = "sa",
+            ["Singapore"] = "sg",
+            ["Spain"] = "es",
+            ["USA"] = "us",
+            ["United States"] = "us",
+            ["UAE"] = "ae",
+            ["Abu Dhabi"] = "ae",
+            ["Las Vegas"] = "us",
+            ["Miami"] = "us"
         };
 
-        var fileName = trackMap.FirstOrDefault(kvp => 
-            circuitShortName.Equals(kvp.Key, StringComparison.OrdinalIgnoreCase) ||
-            circuitShortName.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase)).Value;
-        
-        if (fileName != null)
+        var countryCode = countryCodeMap.FirstOrDefault(kvp =>
+            countryName.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase)).Value;
+
+        if (!string.IsNullOrEmpty(countryCode))
         {
-            return $"https://media.formula1.com/image/upload/content/dam/fom-website/2018-redesign-assets/Circuit%20maps%2016x9/{fileName}.png";
+            return $"https://flagcdn.com/w320/{countryCode}.png";
         }
 
         return "";
