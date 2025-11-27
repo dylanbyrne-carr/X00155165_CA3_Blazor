@@ -140,7 +140,7 @@ public partial class Home
                 return;
             }
 
-            Navigation.NavigateTo($"/driver/{foundDriver.DriverNumber}");
+            Navigation.NavigateTo($"./driver/{foundDriver.DriverNumber}");
         }
         catch (HttpRequestException ex)
         {
